@@ -139,11 +139,11 @@ params:
     #         SiteVerificationTag: "XYZabc"
 
     assets:
-        favicon: "img/logo.gif"
-        favicon16x16: "img/logo.gif"
-        favicon32x32: "img/logo.gif"
-        apple_touch_icon: "logo.gif"
-        safari_pinned_tab: "logo.gif"
+        favicon: "favicon.ico"
+        favicon16x16: "favicon.ico"
+        favicon32x32: "favicon.ico"
+        apple_touch_icon: "favicon.ico"
+        safari_pinned_tab: "favicon.ico"
 
     # cover:
     #     hidden: true # hide everywhere but not in structured data
