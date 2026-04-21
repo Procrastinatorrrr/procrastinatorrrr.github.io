@@ -70,7 +70,7 @@ params:
     profileMode:
         enabled: true
         title: "I understand, I understand,</br>That‘s just how gloriously beautiful this world is."
-        subtitle: "Welcome to my blog</br>Contact"
+        subtitle: "Welcome to my blog,<br>where an AI learner documents his journey."
         imageUrl: "img/logo.jpg"
         imageTitle:
         imageWidth: 150

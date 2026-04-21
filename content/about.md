@@ -76,7 +76,7 @@ Proposed tool call noise injection to evaluate code generation agents' robustnes
 
 - **Languages**: CET-4 (570), CET-6 (626)
 - **Programming**: Python, C/C++, JavaScript/TypeScript, SQL
-- **AI/LLM**: LLM architecture; PyTorch, SFT, RL experience; PPO/DPO/GRPO/DAPO; FSDP/Deepspeed, vLLM/aglang, veRL/Slime
-- **AI Agent**: RAG/MCP/Agent Skills
+- **AI/LLM**: LLM architecture; PyTorch; SFT, RL; FSDP/Deepspeed; vLLM/sglang; veRL/Slime
+- **AI Agent**: RAG/MCP/Skills
 - **Web Full Stack**: Vue, FastAPI
 - **AI Coding Tools**: Extensive vibe coding experience

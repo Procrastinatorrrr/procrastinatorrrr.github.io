@@ -1089,7 +1089,7 @@ DPO 洞察到了 KL 惩罚下的闭式解，用优雅的数学等价替换了复
 
 ## Citation
 
-如果你在研究或工作中引用了本文，以下是推荐的引用格式：
+如果你在研究或工作中引用了本文，请以以下格式引用：
 
 **BibTeX:**
 
@@ -1098,7 +1098,7 @@ DPO 洞察到了 KL 惩罚下的闭式解，用优雅的数学等价替换了复
   author       = {Long, Yijun},
   title        = {大模型中的强化学习：从 REINFORCE 到 xxPO},
   year         = {2026},
-  howpublished = {\url{https://procrastinatorrrr.github.io/posts/202604-rl-llm/}},
+  howpublished = {\url{https://procrastinatorrrr.github.io/posts/tech/202604-rl-llm/}},
   note         = {Accessed: 2026-04-21}
 }
 ```
@@ -1106,7 +1106,7 @@ DPO 洞察到了 KL 惩罚下的闭式解，用优雅的数学等价替换了复
 **APA Style:**
 
 ```txt
-Long, Y. (2026). 大模型中的强化学习：从 REINFORCE 到 xxPO. https://procrastinatorrrr.github.io/posts/202604-rl-llm/
+Long, Y. (2026). 大模型中的强化学习：从 REINFORCE 到 xxPO. https://procrastinatorrrr.github.io/posts/tech/202604-rl-llm/
 ```
 
 ## References
