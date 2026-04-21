@@ -1,0 +1,49 @@
+{{- /* Footer custom content area start */ -}}
+{{- /*     Insert any custom code web-analytics, resources, etc. here */ -}}
+{{- /* Footer custom content area end */ -}}
+{{ if .IsPage }}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const tocLinks = document.querySelectorAll('.toc a');
+        // 抓取所有的正文标题
+        const sections = document.querySelectorAll('.post-content h1, .post-content h2, .post-content h3, .post-content h4, .post-content h5, .post-content h6');
+        
+        if (tocLinks.length === 0 || sections.length === 0) return;
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            
+            sections.forEach(section => {
+                // 改用 getBoundingClientRect().top 获取相对屏幕视口的绝对位置，更精准
+                const sectionTop = section.getBoundingClientRect().top;
+                // 当小标题距离屏幕顶部 150px 以内（或已经滚动到上方），标记为当前阅读的章节
+                if (sectionTop <= 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            tocLinks.forEach(link => {
+                link.classList.remove('active-toc');
+                if (current) {
+                    // 使用 decodeURI 统一解码，完美解决中英文/特殊符号匹配不到的问题
+                    const href = decodeURI(link.getAttribute('href'));
+                    const currentId = '#' + decodeURI(current);
+                    
+                    if (href === currentId) {
+                        link.classList.add('active-toc');
+                    }
+                }
+            });
+        });
+    });
+</script>
+
+<style>
+/* 加入 !important 强制提升优先级，防止被 PaperMod 默认的小标题样式（灰色）覆盖 */
+.toc a.active-toc {
+    color: var(--primary) !important;
+    font-weight: 600 !important;
+    text-decoration: underline !important;
+}
+</style>
+{{ end }}

@@ -1,0 +1,89 @@
+<div class="social-icons" {{ with .align}}align="{{.}}" {{- end }}>
+    {{- range site.Params.socialIcons }}
+    {{- $isImage := false }}
+    {{- if or (hasSuffix .url ".jpg") (hasSuffix .url ".jpeg") (hasSuffix .url ".png") (hasSuffix .url ".gif") (hasSuffix .url ".webp") }}
+    {{- $isImage = true }}
+    {{- end }}
+    <a href="{{ trim .url " " | safeURL }}"
+        {{ if $isImage }}class="social-icon-image" data-img="{{ trim .url " " | safeURL }}"{{ else }}target="_blank" rel="noopener noreferrer me"{{ end }}
+        title="{{ (.title | default .name) | title }}">
+        {{ partial "svg.html" . }}
+    </a>
+    {{- end }}
+</div>
+
+{{- if site.Params.socialIcons }}
+<div id="image-modal" class="image-modal">
+    <span class="image-modal-close">&times;</span>
+    <img class="image-modal-content" id="modal-img">
+</div>
+
+<style>
+.image-modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    cursor: pointer;
+}
+.image-modal-content {
+    margin: auto;
+    display: block;
+    max-width: 300px;
+    max-height: 80%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 0 !important;
+}
+.image-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: #fff;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 10000;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('image-modal');
+    var modalImg = document.getElementById('modal-img');
+    var closeBtn = document.querySelector('.image-modal-close');
+
+    document.querySelectorAll('.social-icon-image').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            modal.style.display = 'block';
+            modalImg.src = this.getAttribute('data-img');
+        });
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+    }
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
+{{- end }}

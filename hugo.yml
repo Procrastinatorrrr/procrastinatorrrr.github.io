@@ -69,9 +69,9 @@ params:
     env: production # to enable google analytics, opengraph, twitter-cards and schema.
     profileMode:
         enabled: true
-        title: "Spirit of Independence, Freedom of Thought"
+        title: "I understand, I understand,</br>That‘s just how gloriously beautiful this world is."
         subtitle: "Welcome to my blog</br>Contact"
-        imageUrl: "img/logo.gif"
+        imageUrl: "img/logo.jpg"
         imageTitle:
         imageWidth: 150
         imageHeight: 150
