@@ -132,3 +132,130 @@ $2.12 TiB$，这对于训练一个7B模型来说，是不可接受的显存需�
 
 ## 激活重计算
 
+激活重计算（Activation Recomputation，也称 Gradient Checkpointing 或 Rematerialization）的核心思想极其直接：**前向传播时丢弃部分激活值，反向传播需要时再重新算一遍**。这是一种典型的时空权衡（time-space tradeoff）——用额外的计算来换取显存节省。
+
+在不开启重计算时，前向传播会在每一个可学习操作（layernorm、attention、MLP 等）之间保存激活值，形成一条完整的计算图。反向传播顺着这条图反向遍历，每到一个节点就取出之前存的激活值来计算梯度。开启重计算后，我们只保存少量关键位置的激活值（称为 checkpoint），丢弃其余；当反向传播需要某个被丢弃的激活值时，就从最近一个 checkpoint 出发，重新跑一段前向过程把它算回来。
+
+在具体实施中，选择哪些激活值保存、哪些丢弃，是一个需要仔细权衡的问题。常见的策略主要有两种：
+
+### Full 重计算
+
+Full 重计算（也称 "整层重计算"）是最激进的方案：**只在每个 Transformer 层的边界处保存激活值，丢弃层内所有中间结果**。当反向传播需要某一层的激活值时，从该层的输入 checkpoint 重新运行整个前向过程。
+
+以一个标准的 Transformer 层为例：Full 重计算只保存 $\text{input}$ 和 $\text{output}$，丢弃中间所有张量（$Q, K, V, QK^T$, softmax 结果, MLP 中间激活等）。反向传播时需要哪个就从头重跑整层。
+
+**显存节省**：对于每一层，只需保存输入张量（形状 $(bs, seq, d)$）和输出张量（形状 $(bs, seq, d)$），而丢弃了 $Q, K, V$（共 $3 \times bs \times seq \times d$）、$QK^T$ 和 softmax 结果（共 $2 \times bs \times n_{heads} \times seq^2$）、MLP 中间激活（$2 \times bs \times seq \times 4d$）等。以 7B 模型、$seq=4096$ 为例，单层的激活值从约 $5 GiB$ 降至不到 $0.1 GiB$——激活值总显存可降低 **90% 以上**。
+
+**代价**：由于反向传播时需要完整重跑每一层的前向过程，额外计算开销约为 **30-40%**。对于大规模训练而言，这意味着每个训练步骤耗时增加近三分之一，训练总时间成本显著上升。
+
+### Selective 重计算
+
+Full 重计算虽然显存节省最大，但它"一刀切"地丢弃了所有中间结果，有些浪费——并非所有激活值的重计算代价都相同。Selective 重计算的核心洞察是：**不同激活值的存储成本和重计算成本是不对称的，应该优先丢弃"重算便宜但占空间大"的激活值**。
+
+根据 NVIDIA 的重计算原始论文（Dettmers et al., 2023）的分析：
+
+- **注意力激活值**（$QK^T$、softmax 结果）的存储成本极高（$O(seq^2)$），但重计算所需的 FLOPs 相对较少——只需从 $Q, K$ 出发重新做一次矩阵乘和 softmax 即可；
+- **MLP 激活值**（升维后的张量）的存储成本较高（$O(d_{ff})$），但重计算需要完整的升维矩阵乘，FLOPs 开销更大。
+
+因此，Selective 重计算选择**保留 MLP 的输入、丢弃注意力的中间结果**。具体来说：保存 layernorm 的输出（attention 的输入），从它重算出 $Q, K, V$，再算出 $QK^T$ 和 softmax——但不需要存储这些中间结果，因为反向传播时可以直接重算。
+
+> FlashAttention 在反向传播时会自动重算注意力得分和 softmax 归一化因子，而不在前向传播时存储它们——这本质上就是 Selective 重计算的一种实现。
+
+让我们将两种重计算策略的效果量化到我们的 7B 模型例子中（$l=32, d=4096, n_{heads}=32, bs=1$）：
+
+**不开启重计算（$seq=4096$）**：
+
+$$
+\text{Activations} = 32 \times 1 \times (64 \times 4096 \times 4096 + 8 \times 32 \times 4096^2) / 2 = 80 \text{ GiB}
+$$
+
+（混合精度下系数为 2）
+
+**Selective 重计算（丢弃 $QK^T$ 和 softmax 结果）**：
+
+$$
+\text{Activations}_{\text{selective}} = l \cdot bs \cdot \left( 64 \cdot seq \cdot d \right) \text{ 字节}
+$$
+
+注意力模块的平方项被完全消除，只剩 MLP 的线性项：
+
+$$
+= 32 \times 1 \times 64 \times 4096 \times 4096 / 2 = 16 GiB
+$$
+
+激活值从 $80 GiB$ 降至 $16 GiB$，**节省 80%**，额外计算开销仅约 2-5%。
+
+**Full 重计算（只保存层边界激活）**：
+
+$$
+\text{Activations}_{\text{full}} = l \cdot bs \cdot \left( 2 \cdot seq \cdot d \right) \text{ 字节} = 32 \times 1 \times 2 \times 4096 \times 4096 / 2 = 0.5 GiB
+$$
+
+激活值降至不到 1 GiB，**节省 99%** 以上，但额外计算开销约 30-40%。
+
+激活重计算是目前大模型训练中不可或缺的基础技术。它通过用少量额外计算换取大量显存节省，使得在有限显存的 GPU 上训练更大的模型、使用更长的序列成为可能。在实践中，**Selective 重计算是当前的主流选择**——它以极小的计算代价（2-5%）消除了激活值中最"昂贵"的注意力平方项，而且 FlashAttention 已经隐式地实现了这一策略。Full 重计算则作为一种兜底方案，在显存实在不够时以较大计算代价换取极限显存节省。
+
+回到我们的 7B 模型：在混合精度 + Selective 重计算下，总显存需求变为 $(112 + 16) = 128 GiB$。这在一张 H200 上已经可以运行。但是要注意：我们现在讨论的是 $bs=1$ 的极端情况，而激活值随着 bs 线性增长。以实际训练中常用的 $bs=256$ 为例，此时激活值显存需求变为 $256 \times 16 = 4096 \text{ GiB}$ —— 又远远超出单卡显存。有没有什么办法能在不增加显存的条件下增加 $bs$？答案是——梯度累加。
+
+## 梯度累加
+
+梯度累加（Gradient Accumulation）的思路是：既然显存放不下一个大 batch 的激活值，那就把它拆成多个小 batch（称为 **micro-batch**），每次只对一个 micro-batch 做前向和反向传播，得到梯度后**不清零、继续累积**，等所有 micro-batch 都处理完后，再用累积的梯度做一次优化器更新。
+
+设 micro-batch size 为 $mbs$，累加步数为 $n_{acc}$，则一次优化器更新所对应的**全局 batch size**（global batch size, $gbs$）为：
+
+$$
+gbs = mbs \times n_{acc}
+$$
+
+每次优化器更新时的梯度是所有 micro-batch 梯度的均值（假设 loss 已经按 micro-batch 大小做了归一化）：
+
+$$
+g = \frac{1}{n_{acc}} \sum_{i=1}^{n_{acc}} \nabla_\theta \mathcal{L}_i(\theta)
+$$
+
+而优化器更新的动作与不使用梯度累加时完全一致。从数学上看，$n_{acc} = 1$ 时这就是标准的单步训练；$n_{acc} > 1$ 时，优化器看到的梯度与直接用 $gbs = mbs \times n_{acc}$ 做一步训练得到的梯度完全相同。唯一的区别在于**实现方式**：前者把一个大 batch 拆成了多次小 batch 的前后向。
+
+梯度累加对显存消耗带来最直接的变化是：**激活值的大小取决于 micro-batch size，而非 global batch size**。在混合精度 + Selective 重计算下，每个 micro-batch 的激活值显存为：
+
+$$
+l \cdot mbs \cdot 64 \cdot seq \cdot d / 2
+$$
+
+注意这里用 $mbs$ 而不是 $gbs$。以 7B 模型为例，如果我们希望 $gbs = 256$ 的同时显存占用不增加，只需令 $mbs = 1$，则显存需求会与 $bs=1$ 时完全一致（$16 \text{ GiB}$）。
+
+> 一个容易被忽略的细节：在使用梯度累加时，梯度张量在整个累加期间都必须驻留在显存中。而在不使用梯度累加时，每次反向传播产生的梯度在优化器更新后就会被释放（或被新的梯度覆盖）。这意味着梯度累加会**略微增加峰值显存**——多出来的就是梯度缓冲区本身的大小。
+
+### 代价：更多次的前后向
+
+天下没有免费的午餐。梯度累加的代价是计算量的增加：为了达到相同的 global batch size，你需要跑 $n_{acc}$ 次前向+反向，而不是 1 次。
+
+以 $gbs = 256, mbs = 1, n_{acc} = 256$ 为例，每个优化器步骤需要做 256 次前后向。虽然每次前后向处理的 batch 很小，但总计算量（以 FLOPs 计）与直接用 $bs = 256$ 做一次前后向**完全相同**——同样的矩阵乘运算被执行了同样多次。区别在于：由于 micro-batch 太小，GPU 的并行计算能力无法被充分利用（大量计算单元闲置），导致实际训练吞吐量（tokens/second）远低于理想值。
+
+因此，梯度累加并非"白嫖"大 batch，而是在显存受限时的一种妥协方案。在实践中，我们通常会将 $mbs$ 设置为显存允许的最大值，然后用梯度累加来补足剩余的 global batch size 需求，从而在显存和吞吐量之间取得平衡。
+
+### 一个容易忽略的细节：梯度缓冲区的峰值显存
+
+还有一个容易被忽略的细节：在使用梯度累加时，梯度张量在整个累加期间都必须驻留在显存中。而在不使用梯度累加时，每次反向传播产生的梯度在优化器更新后就会被释放（或被新的梯度覆盖）。这意味着梯度累加会**略微增加峰值显存**——多出来的就是梯度缓冲区本身的大小。
+
+对于我们的 7B 模型，梯度占用 $2N = 14 GiB$（BF16），这与 $128 GiB$ 的总量相比占比不大。但在更大规模的模型上，这一点值得留意。
+
+### 小结
+
+梯度累加让我们能够以 $bs=1$ 的显存开销实现任意大的 global batch size，代价是更多的前后向次数和更低的 GPU 利用率。它本质上回答了上一个章节末尾的问题："如何在不增加显存的条件下增加 bs"。
+
+至此，我们已经在单卡上穷尽了所有不改变模型训练语义的优化手段：混合精度训练降低了单元素的存储成本，激活重计算减少了需要存储的元素数量，梯度累加解耦了 batch size 与显存的关系。这三项技术组合后，7B 模型的单卡训练显存降至 $128 GiB$，可以在一张 H200 上运行。
+
+但这只是单卡训练。在实际的大规模训练中，我们通常需要使用成百上千张 GPU。如何将训练扩展到多卡？这就需要引入分布式并行策略了——首先是其中最基础、最直观的一种：**数据并行（Data Parallelism）**。
+
+
+---
+
+## References
+
+- [1] Micikevicius, M., Narang, S., Alben, J., et al. (2018). [Mixed Precision Training](https://arxiv.org/abs/1710.03740). *ICLR 2019*.
+- [2] Loshchilov, I., & Hutter, F. (2019). [Decoupled Weight Decay Regularization](https://arxiv.org/abs/1711.05101). *ICLR 2019*.
+- [3] Chen, T., Xu, B., Zhang, C., & Guestrin, C. (2016). [Training Deep Nets with Sublinear Memory Cost](https://arxiv.org/abs/1604.06174). *arXiv preprint arXiv:1604.06174*.
+- [4] Dettmers, T., Pagnoni, A., Holtzman, A., & Zettlemoyer, L. (2023). [Reducing Activation Recomputation in Large Transformer Models](https://proceedings.mlsys.org/paper_files/paper/2023/file/80083951326cf5b35e5100260d64ed81-Paper-mlsys2023.pdf). *MLSys 2023*.
+- [5] Dao, T., Fu, D., Ermon, S., Rudra, A., & Ré, C. (2022). [FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness](https://arxiv.org/abs/2205.14135). *NeurIPS 2022*.
+- [6] Dao, T. (2023). [FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning](https://arxiv.org/abs/2307.08691). *arXiv preprint arXiv:2307.08691*.
+- [7] Brown, T., Mann, B., Ryder, N., et al. (2020). [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165). *NeurIPS 2020*.
