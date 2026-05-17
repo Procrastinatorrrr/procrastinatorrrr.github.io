@@ -801,7 +801,7 @@ $$
    $$
    即，该替换没有改变目标函数。那换完有什么效果？再对其进行求导，得到：
    $$
-   \frac{\partial D_{KL}}{\partial \pi_\theta} = \frac{\frac{\pi_{\text{ref}}}{\pi_\theta} - \log \frac{\pi_{\text{ref}}}{\pi_\theta} - 1}{\partial \pi_\theta} = \frac{\pi_\theta - \pi_{\text{ref}}}{\pi_\theta^2}
+   \frac{\partial D_{KL}}{\partial \pi_\theta} = \frac{\partial}{\partial \pi_\theta}\left( \frac{\pi_{\text{ref}}}{\pi_\theta} - \log \frac{\pi_{\text{ref}}}{\pi_\theta} - 1 \right) = \frac{\pi_\theta - \pi_{\text{ref}}}{\pi_\theta^2}
    $$
    此时可以发现，优化器的更新方向与我们的意图完全相同：永远朝着靠近 $\pi_{\text{ref}}$ 的方向。
 
