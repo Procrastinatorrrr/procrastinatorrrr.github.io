@@ -2,7 +2,7 @@
 title: "Deepseek v3 - v3.2 - v4 中的 Attention 架构变化：从隐藏维度压缩到序列维度压缩"
 date: 2026-05-17
 author: "Yijun Long"
-tags: ["Attention", "LLM", "RLHF", "MLA", "DSA", "CSA", "HCA"]
+tags: ["Attention", "LLM", "MLA", "DSA", "CSA", "HCA"]
 categories: ["Machine Learning", "LLM", "Attention"]
 description: "梳理 Deepseek 系列模型中注意力机制的架构变化与演进逻辑。"
 math: true

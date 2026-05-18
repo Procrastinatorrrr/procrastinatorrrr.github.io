@@ -5,16 +5,16 @@ lastmod: 2026-04-22T14:47:40+08:00
 author: ["Yijun Long"]
 
 categories:
-- category 1
-- category 2
+# - category 1
+# - category 2
 
 tags:
-- tag 1
-- tag 2
+# - tag 1
+# - tag 2
 
 keywords:
-- word 1
-- word 2
+# - word 1
+# - word 2
 
 description: "" # 文章描述，与搜索优化相关
 summary: "" # 文章简单描述，会展示在主页
